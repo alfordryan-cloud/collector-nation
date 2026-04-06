@@ -20,6 +20,13 @@ const supabase = createClient(
 );
 
 async function fetchVideosFromDB() {
+  // Check env vars are loaded before attempting
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !key || key === "PASTE_YOUR_TOKEN_HERE") {
+    console.warn("Supabase env vars not configured");
+    return [];
+  }
   const { data, error } = await supabase
     .from("videos")
     .select("*, video_products(*)")
