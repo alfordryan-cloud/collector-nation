@@ -10,63 +10,34 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
-const MUX_TOKEN_ID = import.meta.env.VITE_MUX_TOKEN_ID;
-const MUX_SECRET = import.meta.env.VITE_MUX_SECRET;
 const SHOPIFY_DOMAIN = "collector-station.myshopify.com";
 
 // ============================================================
-// MUX API HELPERS
+// MUX API HELPERS — via Vercel serverless proxy (keeps secret server-side)
 // ============================================================
 async function createMuxUploadUrl() {
-  const credentials = btoa(`${MUX_TOKEN_ID}:${MUX_SECRET}`);
-  const res = await fetch("https://api.mux.com/video/v1/uploads", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Basic ${credentials}`,
-    },
-    body: JSON.stringify({
-      cors_origin: window.location.origin,
-      new_asset_settings: {
-        playback_policy: ["public"],
-        mp4_support: "none",
-      },
-    }),
-  });
+  const res = await fetch("/api/create-upload", { method: "POST" });
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(err.error?.message || `Mux API error ${res.status}`);
+    throw new Error(err.error || `Upload API error ${res.status}`);
   }
-  const data = await res.json();
-  return { uploadId: data.data.id, uploadUrl: data.data.url };
+  return await res.json(); // { uploadId, uploadUrl }
 }
 
 async function getMuxAsset(uploadId) {
-  const credentials = btoa(`${MUX_TOKEN_ID}:${MUX_SECRET}`);
-  const res = await fetch(`https://api.mux.com/video/v1/uploads/${uploadId}`, {
-    headers: { "Authorization": `Basic ${credentials}` },
-  });
+  const res = await fetch(`/api/mux-asset?type=upload&id=${uploadId}`);
   if (!res.ok) throw new Error(`Mux API error ${res.status}`);
-  const data = await res.json();
-  return data.data;
+  return await res.json();
 }
 
 async function getMuxAssetById(assetId) {
-  const credentials = btoa(`${MUX_TOKEN_ID}:${MUX_SECRET}`);
-  const res = await fetch(`https://api.mux.com/video/v1/assets/${assetId}`, {
-    headers: { "Authorization": `Basic ${credentials}` },
-  });
+  const res = await fetch(`/api/mux-asset?type=asset&id=${assetId}`);
   if (!res.ok) throw new Error(`Mux API error ${res.status}`);
-  const data = await res.json();
-  return data.data;
+  return await res.json();
 }
 
 async function deleteMuxAsset(assetId) {
-  const credentials = btoa(`${MUX_TOKEN_ID}:${MUX_SECRET}`);
-  await fetch(`https://api.mux.com/video/v1/assets/${assetId}`, {
-    method: "DELETE",
-    headers: { "Authorization": `Basic ${credentials}` },
-  });
+  await fetch(`/api/mux-delete?assetId=${assetId}`, { method: "DELETE" });
 }
 
 // ============================================================
