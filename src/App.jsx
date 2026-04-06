@@ -261,34 +261,27 @@ const styles = `
   .pcrow{display:flex;align-items:center;justify-content:space-between;font-family:var(--fc);font-size:12px;color:var(--gray)}
   .cbtn{background:none;border:none;cursor:pointer;color:var(--gray);font-size:16px;padding:4px;display:flex}
   .cbtn:hover{color:var(--white)}
-  /* Shoppable bar — always sits below video, featured state uses transform to pop */
-  .shop-ov-wrap{
-    overflow:hidden;
-    border-top:2px solid var(--gold);
-    border-bottom:1px solid rgba(201,168,76,.2);
-  }
-  .shop-ov-featured{
-    background:rgba(8,8,8,.98);
-    padding:14px 14px;
+  /* FEATURED — fixed to bottom of screen, slides up over everything */
+  .shop-featured{
+    position:fixed;bottom:70px;left:12px;right:12px;z-index:500;
+    background:rgba(8,8,8,.97);border:2px solid var(--gold);
+    border-radius:8px;padding:12px 14px;
     display:flex;align-items:center;gap:12px;cursor:pointer;
-    transform:translateY(0);
-    animation:shopPop .4s cubic-bezier(0.34,1.56,0.64,1);
+    box-shadow:0 -4px 32px rgba(0,0,0,.6);
+    animation:shopUp .4s cubic-bezier(0.34,1.56,0.64,1);
   }
-  @keyframes shopPop{
-    from{transform:translateY(100%);opacity:0}
+  @keyframes shopUp{
+    from{transform:translateY(120px);opacity:0}
     to{transform:translateY(0);opacity:1}
   }
-  .shop-ov-docked{
-    background:rgba(0,0,0,.97);
+  /* DOCKED — normal flow bar sitting below video */
+  .shop-docked{
+    background:var(--surface);border-top:2px solid var(--gold);
+    border-bottom:1px solid var(--border);
     padding:10px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;
-    animation:shopSettle .25s ease;
   }
-  @keyframes shopSettle{
-    from{transform:translateY(-2px);opacity:.9}
-    to{transform:translateY(0);opacity:1}
-  }
-  .shop-ov-img{width:44px;height:44px;border-radius:4px;object-fit:cover;flex-shrink:0}
-  .shop-ov-img-lg{width:52px;height:52px;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid rgba(201,168,76,.4)}
+  .shop-img{width:44px;height:44px;border-radius:4px;object-fit:cover;flex-shrink:0}
+  .shop-img-lg{width:54px;height:54px;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid rgba(201,168,76,.4)}
   .shop-ov-btn{padding:6px 14px;border-radius:3px;background:var(--gold);color:#000;border:none;cursor:pointer;font-family:var(--fc);font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap}
   .shop-ov-img{width:48px;height:48px;border-radius:4px;object-fit:cover;flex-shrink:0}
   .shop-ov-btn{margin-left:auto;padding:6px 14px;border-radius:3px;background:var(--gold);color:#000;border:none;cursor:pointer;font-family:var(--fc);font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap}
@@ -510,37 +503,21 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
             </div>
           )}
         </div>
-        {/* SHOPPABLE BAR — slides up from below video, then settles */}
-        {shopProd&&(
-          <div className="shop-ov-wrap">
-            <div
-              className={shopDocked?"shop-ov-docked":"shop-ov-featured"}
-              onClick={()=>{setShowProd(true);muxRef.current?.pause();}}
-            >
-              {shopProd.primaryImage
-                ? <img className={shopDocked?"shop-ov-img":"shop-ov-img-lg"} src={shopProd.primaryImage} alt={shopProd.name}/>
-                : <div style={{width:shopDocked?44:52,height:shopDocked?44:52,borderRadius:shopDocked?4:6,background:"var(--surface3)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>📦</div>
-              }
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontFamily:"var(--fc)",fontSize:10,color:"var(--gold)",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",marginBottom:shopDocked?1:3}}>
-                  🛍 {shopDocked?"Shoppable":"Featured Product"}
-                </div>
-                <div style={{fontFamily:"var(--fc)",fontSize:shopDocked?13:15,fontWeight:700,color:"var(--white)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginBottom:shopDocked?1:2}}>
-                  {shopProd.name}
-                </div>
-                <div style={{fontFamily:"var(--fc)",fontSize:shopDocked?12:14,color:"var(--gold)",fontWeight:700}}>
-                  {fp(shopProd.price)}
-                </div>
-              </div>
-              <div style={{display:"flex",flexDirection:shopDocked?"row":"column",gap:shopDocked?6:5,flexShrink:0,alignItems:"flex-end"}}>
-                <button className="shop-ov-btn">Shop Now</button>
-                <button
-                  onClick={e=>{e.stopPropagation();setShopProd(null);clearTimeout(dockTimer.current);}}
-                  style={{padding:shopDocked?"6px 8px":"3px 8px",borderRadius:3,background:shopDocked?"rgba(255,255,255,.08)":"none",border:shopDocked?"1px solid var(--border2)":"none",color:"var(--gray)",cursor:"pointer",fontSize:shopDocked?12:11,fontFamily:"var(--fc)",letterSpacing:".5px"}}
-                >
-                  {shopDocked?"✕":"dismiss"}
-                </button>
-              </div>
+        {/* DOCKED BAR — permanent bar below video once featured dismisses */}
+        {shopProd&&shopDocked&&(
+          <div className="shop-docked" onClick={()=>{setShowProd(true);muxRef.current?.pause();}}>
+            {shopProd.primaryImage
+              ?<img className="shop-img" src={shopProd.primaryImage} alt={shopProd.name}/>
+              :<div style={{width:44,height:44,borderRadius:4,background:"var(--surface3)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>📦</div>
+            }
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontFamily:"var(--fc)",fontSize:10,color:"var(--gold)",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",marginBottom:2}}>🛍 Shoppable</div>
+              <div style={{fontFamily:"var(--fc)",fontSize:13,fontWeight:600,color:"var(--white)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{shopProd.name}</div>
+              <div style={{fontFamily:"var(--fc)",fontSize:12,color:"var(--gold)",fontWeight:700}}>{fp(shopProd.price)}</div>
+            </div>
+            <div style={{display:"flex",gap:6,flexShrink:0}}>
+              <button className="shop-ov-btn">Shop Now</button>
+              <button onClick={e=>{e.stopPropagation();setShopProd(null);}} style={{padding:"6px 8px",borderRadius:3,background:"rgba(255,255,255,.08)",border:"1px solid var(--border2)",color:"var(--gray)",cursor:"pointer",fontSize:12}}>✕</button>
             </div>
           </div>
         )}
@@ -553,6 +530,24 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
         </div>
         <div className="gap"/>
       </div>
+      {/* FEATURED CARD — fixed to bottom of screen, shows for 3s then docks */}
+      {shopProd&&!shopDocked&&(
+        <div className="shop-featured" onClick={()=>{setShowProd(true);muxRef.current?.pause();}}>
+          {shopProd.primaryImage
+            ?<img className="shop-img-lg" src={shopProd.primaryImage} alt={shopProd.name}/>
+            :<div style={{width:54,height:54,borderRadius:6,background:"var(--surface3)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>📦</div>
+          }
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontFamily:"var(--fc)",fontSize:10,color:"var(--gold)",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",marginBottom:3}}>🛍 Featured Product</div>
+            <div style={{fontFamily:"var(--fc)",fontSize:15,fontWeight:700,color:"var(--white)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginBottom:2}}>{shopProd.name}</div>
+            <div style={{fontFamily:"var(--fc)",fontSize:14,color:"var(--gold)",fontWeight:700}}>{fp(shopProd.price)}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:5,flexShrink:0,alignItems:"flex-end"}}>
+            <button className="shop-ov-btn">Shop Now</button>
+            <button onClick={e=>{e.stopPropagation();setShopProd(null);clearTimeout(dockTimer.current);}} style={{padding:"2px 8px",background:"none",border:"none",color:"var(--gray2)",cursor:"pointer",fontSize:11,fontFamily:"var(--fc)"}}>dismiss</button>
+          </div>
+        </div>
+      )}
       {showProd&&shopProd&&<ProductDetail product={shopProd} onClose={()=>{setShowProd(false);setShopProd(null);}} onAddToCart={onAddToCart}/>}
     </div>
   );
