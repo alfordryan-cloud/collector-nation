@@ -204,13 +204,15 @@ const styles = `
   .skel-line.s{width:60%}
   @keyframes sh{0%,100%{opacity:1}50%{opacity:.5}}
 
-  .modal{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.96);display:flex;flex-direction:column;animation:fi .2s ease}
+  .modal{position:fixed;inset:0;z-index:200;background:#000;display:flex;flex-direction:column;animation:fi .2s ease}
   @keyframes fi{from{opacity:0}to{opacity:1}}
-  .mhdr{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+  .mhdr{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0;min-height:48px}
   .mclose{background:none;border:none;cursor:pointer;color:var(--gray);font-size:20px;padding:4px;display:flex;align-items:center}
   .mclose:hover{color:var(--white)}
-  .mtitle{font-family:var(--fc);font-size:15px;font-weight:600;color:var(--white);flex:1;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
-  .mbody{flex:1;overflow-y:auto}
+  .mtitle{font-family:var(--fc);font-size:14px;font-weight:600;color:var(--white);flex:1;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+  .mbody{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+  .mux-wrap{width:100%;background:#000;flex-shrink:0}
+  .mux-wrap mux-player{width:100%;display:block}
 
   .pdtl{padding:16px}
   .pdtl-img{aspect-ratio:1;background:#fff;border-radius:8px;overflow:hidden;margin-bottom:16px;display:flex;align-items:center;justify-content:center}
@@ -378,46 +380,31 @@ function PreRoll({onSkip, onImpression}) {
 // ============================================================
 function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
   const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [showAd, setShowAd] = useState(true);
-  const [shopProd, setShopProd] = useState(null);
-  const [shopDocked, setShopDocked] = useState(false);
+  const [shopProd, setShopProd] = useState(null);   // currently featured product
+  const [dockedProd, setDockedProd] = useState(null); // persists below video
   const [showProd, setShowProd] = useState(false);
-  const timer = useRef(null);
   const muxRef = useRef(null);
   const dockTimer = useRef(null);
-  // Track which timestamps have already fired so we dont re-trigger
-  const firedTimestamps = useRef(new Set());
-  // Ref mirror of shopProd for use inside onTimeUpdate closure
-  const shopProdRef = useRef(null);
+  // Tracks timestamps already fired this session — prevents re-triggering
+  const fired = useRef(new Set());
 
-  // Keep ref in sync with state
-  useEffect(()=>{ shopProdRef.current = shopProd; },[shopProd]);
-
-  // When a product is set, show featured for 3s then switch to docked
-  // Use a separate effect that only triggers on shopProd identity change
-  const shopProdId = shopProd?.id;
+  // When featured product appears, start 3s timer then move to docked bar
   useEffect(()=>{
-    if(!shopProdId) return;
-    setShopDocked(false);
+    if(!shopProd) return;
     clearTimeout(dockTimer.current);
-    dockTimer.current = setTimeout(()=>setShopDocked(true), 3000);
+    dockTimer.current = setTimeout(()=>{
+      setDockedProd(shopProd); // move to persistent docked bar
+      setShopProd(null);       // dismiss featured card
+    }, 3000);
     return ()=>clearTimeout(dockTimer.current);
-  },[shopProdId]);
+  },[shopProd]);
 
-  // Simulated player timer (for videos without Mux playback ID)
-  useEffect(()=>{
-    if(playing&&!showAd&&!video.muxPlaybackId){
-      timer.current = setInterval(()=>{
-        setProgress(p=>{
-          const next = p+0.4;
-          if(next>=100){clearInterval(timer.current);setPlaying(false);return 100;}
-          return next;
-        });
-      },200);
-    } else clearInterval(timer.current);
-    return()=>clearInterval(timer.current);
-  },[playing,showAd,video.muxPlaybackId]);
+  // Autoplay after ad skip
+  const handleSkipAd = useCallback(()=>{
+    setShowAd(false);
+    setTimeout(()=>{ muxRef.current?.play?.(); }, 100);
+  },[]);
 
   return (
     <div className="modal">
@@ -429,42 +416,43 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
         <div style={{position:"relative",background:"#000"}}>
           {showAd ? (
             <div className="player-stage">
-              <PreRoll onSkip={()=>setShowAd(false)} onImpression={()=>onImpression?.({type:"pre-roll",campaignId:"cam1"})}/>
+              <PreRoll onSkip={handleSkipAd} onImpression={()=>onImpression?.({type:"pre-roll",campaignId:"cam1"})}/>
             </div>
           ) : video.muxPlaybackId ? (
             /* Wrap player in relative container so featured overlay
                positions against the video frame only */
-            <MuxPlayer
-              ref={muxRef}
-              playbackId={video.muxPlaybackId}
-              streamType="on-demand"
-              autoPlay={false}
-              accentColor="#C0272D"
-              style={{width:"100%",display:"block",maxHeight:"60vh","--controls":"auto"}}
-              onTimeUpdate={e=>{
-                const el = e.target;
-                if(!el||!el.duration) return;
-                const currentSec = el.currentTime;
-                setProgress((currentSec/el.duration)*100);
-                // Use ref to check current value — avoids stale closure bug
-                if(video.taggedProducts?.length>0 && !shopProdRef.current){
-                  video.taggedProducts.forEach(tp=>{
-                    const tsKey = tp.timestamp_seconds;
-                    // Only fire if not already fired for this timestamp
-                    if(firedTimestamps.current.has(tsKey)) return;
-                    if(Math.abs(currentSec - tsKey) < 2){
-                      const prod = products.find(p=>p.handle===tp.shopify_handle);
-                      if(prod){
-                        firedTimestamps.current.add(tsKey);
-                        setShopProd(prod);
+            <div className="mux-wrap">
+              <MuxPlayer
+                ref={muxRef}
+                playbackId={video.muxPlaybackId}
+                streamType="on-demand"
+                autoPlay={false}
+                accentColor="#C0272D"
+                style={{width:"100%",display:"block"}}
+                onTimeUpdate={e=>{
+                  const el = e.target;
+                  if(!el || !el.duration || el.currentTime < 0.5) return;
+                  const currentSec = el.currentTime;
+                  // Check tagged products — only fire if not already fired
+                  if(video.taggedProducts?.length > 0){
+                    video.taggedProducts.forEach(tp=>{
+                      const ts = Number(tp.timestamp_seconds);
+                      if(fired.current.has(ts)) return;
+                      if(currentSec >= ts && currentSec <= ts + 3){
+                        const prod = products.find(p=>p.handle===tp.shopify_handle);
+                        if(prod){
+                          fired.current.add(ts);
+                          setShopProd(prod);
+                          setDockedProd(null); // reset docked when new product fires
+                        }
                       }
-                    }
-                  });
-                }
-              }}
-              onPlay={()=>setPlaying(true)}
-              onPause={()=>setPlaying(false)}
-            />
+                    });
+                  }
+                }}
+                onPlay={()=>setPlaying(true)}
+                onPause={()=>setPlaying(false)}
+              />
+            </div>
           ) : (
             <div style={{position:"relative"}}>
               <div className="player-stage">
@@ -503,35 +491,35 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
             </div>
           )}
         </div>
-        {/* DOCKED BAR — permanent bar below video once featured dismisses */}
-        {shopProd&&shopDocked&&(
+        {/* DOCKED BAR — sits below video, persists until dismissed */}
+        {dockedProd&&(
           <div className="shop-docked" onClick={()=>{setShowProd(true);muxRef.current?.pause();}}>
-            {shopProd.primaryImage
-              ?<img className="shop-img" src={shopProd.primaryImage} alt={shopProd.name}/>
+            {dockedProd.primaryImage
+              ?<img className="shop-img" src={dockedProd.primaryImage} alt={dockedProd.name}/>
               :<div style={{width:44,height:44,borderRadius:4,background:"var(--surface3)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>📦</div>
             }
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontFamily:"var(--fc)",fontSize:10,color:"var(--gold)",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",marginBottom:2}}>🛍 Shoppable</div>
-              <div style={{fontFamily:"var(--fc)",fontSize:13,fontWeight:600,color:"var(--white)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{shopProd.name}</div>
-              <div style={{fontFamily:"var(--fc)",fontSize:12,color:"var(--gold)",fontWeight:700}}>{fp(shopProd.price)}</div>
+              <div style={{fontFamily:"var(--fc)",fontSize:13,fontWeight:600,color:"var(--white)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{dockedProd.name}</div>
+              <div style={{fontFamily:"var(--fc)",fontSize:12,color:"var(--gold)",fontWeight:700}}>{fp(dockedProd.price)}</div>
             </div>
             <div style={{display:"flex",gap:6,flexShrink:0}}>
               <button className="shop-ov-btn">Shop Now</button>
-              <button onClick={e=>{e.stopPropagation();setShopProd(null);}} style={{padding:"6px 8px",borderRadius:3,background:"rgba(255,255,255,.08)",border:"1px solid var(--border2)",color:"var(--gray)",cursor:"pointer",fontSize:12}}>✕</button>
+              <button onClick={e=>{e.stopPropagation();setDockedProd(null);}} style={{padding:"6px 8px",borderRadius:3,background:"rgba(255,255,255,.08)",border:"1px solid var(--border2)",color:"var(--gray)",cursor:"pointer",fontSize:12}}>✕</button>
             </div>
           </div>
         )}
-        <div style={{padding:"16px 16px 8px"}}>
-          <div style={{fontFamily:"var(--fd)",fontSize:20,fontWeight:600,color:"var(--white)",marginBottom:6}}>{video.title}</div>
-          <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-            <span style={{fontFamily:"var(--fc)",fontSize:12,color:"var(--gray)"}}>{video.creator}</span>
-            <span style={{fontFamily:"var(--fc)",fontSize:12,color:"var(--gray2)"}}>{video.views} views · {video.category}</span>
+        <div style={{padding:"12px 16px",borderTop:"1px solid var(--border)"}}>
+          <div style={{fontFamily:"var(--fd)",fontSize:17,fontWeight:600,color:"var(--white)",marginBottom:3}}>{video.title}</div>
+          <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+            {video.creator&&<span style={{fontFamily:"var(--fc)",fontSize:12,color:"var(--gray)"}}>{video.creator}</span>}
+            {video.category&&<span style={{fontFamily:"var(--fc)",fontSize:11,color:"var(--gray2)"}}>{video.category}</span>}
           </div>
         </div>
         <div className="gap"/>
       </div>
-      {/* FEATURED CARD — fixed to bottom of screen, shows for 3s then docks */}
-      {shopProd&&!shopDocked&&(
+      {/* FEATURED CARD — fixed bottom of screen, slides up for 3s then moves to docked bar */}
+      {shopProd&&(
         <div className="shop-featured" onClick={()=>{setShowProd(true);muxRef.current?.pause();}}>
           {shopProd.primaryImage
             ?<img className="shop-img-lg" src={shopProd.primaryImage} alt={shopProd.name}/>
@@ -544,11 +532,18 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:5,flexShrink:0,alignItems:"flex-end"}}>
             <button className="shop-ov-btn">Shop Now</button>
-            <button onClick={e=>{e.stopPropagation();setShopProd(null);clearTimeout(dockTimer.current);}} style={{padding:"2px 8px",background:"none",border:"none",color:"var(--gray2)",cursor:"pointer",fontSize:11,fontFamily:"var(--fc)"}}>dismiss</button>
+            <button onClick={e=>{e.stopPropagation();clearTimeout(dockTimer.current);setDockedProd(shopProd);setShopProd(null);}} style={{padding:"2px 8px",background:"none",border:"none",color:"var(--gray2)",cursor:"pointer",fontSize:11,fontFamily:"var(--fc)"}}>dismiss</button>
           </div>
         </div>
       )}
-      {showProd&&shopProd&&<ProductDetail product={shopProd} onClose={()=>{setShowProd(false);setShopProd(null);}} onAddToCart={onAddToCart}/>}
+      {/* Product detail modal — works from both featured and docked */}
+      {showProd&&(shopProd||dockedProd)&&(
+        <ProductDetail
+          product={shopProd||dockedProd}
+          onClose={()=>setShowProd(false)}
+          onAddToCart={onAddToCart}
+        />
+      )}
     </div>
   );
 }
