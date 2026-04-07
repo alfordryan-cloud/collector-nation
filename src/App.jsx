@@ -411,112 +411,81 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
       const prod = productsRef.current?.find(p=>p.handle===tp.shopify_handle);
       if(prod){
         fired.current.add(parseInt(tp.timestamp_seconds)||0);
-        setShopProd(prod);
-        // Don't clear docked — let both coexist briefly, docked updates when new one docks
+        setDockedProd(null); // clear old docked bar immediately
+        setShopProd(prod);   // show new featured card
       }
     }
   },[]);
 
   // Height budget: 100dvh - 48px header - env(safe-area) - 56px bottom nav
   // Video gets what it needs up to that budget
-  const videoMaxH = "calc(100dvh - 48px - 56px - env(safe-area-inset-bottom, 0px))";
+  // Docked bar is 64px. Video fills everything else.
+  const DOCKED_H = 64;
+  const HEADER_H = 48;
+  const videoMaxH = `calc(100dvh - ${HEADER_H}px - ${DOCKED_H}px - env(safe-area-inset-bottom, 0px))`;
 
   return (
-    <div className="modal">
-      <div className="mhdr">
+    <div className="modal" style={{display:"flex",flexDirection:"column",height:"100dvh",overflow:"hidden"}}>
+      <div className="mhdr" style={{flexShrink:0,height:48,display:"flex",alignItems:"center",gap:10,padding:"0 14px",borderBottom:"1px solid var(--border)",background:"#000"}}>
         <button className="mclose" onClick={onClose}>✕</button>
         <div className="mtitle">{video.title}</div>
       </div>
-      <div className="mbody">
-        <div style={{background:"#000",flexShrink:0}}>
-          {showAd ? (
-            <div className="player-stage">
-              <PreRoll onSkip={handleSkipAd} onImpression={()=>onImpression?.({type:"pre-roll",campaignId:"cam1"})}/>
-            </div>
-          ) : video.muxPlaybackId ? (
-            <div style={{width:"100%",background:"#000",lineHeight:0,maxHeight:videoMaxH,overflow:"hidden"}}>
-              <MuxPlayer
-                ref={muxRef}
-                playbackId={video.muxPlaybackId}
-                streamType="on-demand"
-                autoPlay={false}
-                accentColor="#C0272D"
-                style={{width:"100%",display:"block",maxHeight:videoMaxH}}
-                onTimeUpdate={handleTimeUpdate}
-                onPlay={()=>setPlaying(true)}
-                onPause={()=>setPlaying(false)}
-              />
-            </div>
-          ) : (
-            <div style={{position:"relative"}}>
-              <div className="player-stage">
-                <div style={{textAlign:"center"}}>
-                  <div style={{fontFamily:"var(--fd)",fontSize:"clamp(16px,4vw,26px)",fontWeight:600,color:"var(--white)",padding:"0 20px",lineHeight:1.2}}>{video.title}</div>
-                  <div style={{fontFamily:"var(--fc)",fontSize:13,color:"var(--gray)",marginTop:6}}>{video.creator}</div>
-                </div>
-                <button className="p-play" style={playing?{background:"rgba(255,255,255,.1)"}:{}} onClick={()=>setPlaying(!playing)}>
-                  {playing?"⏸":"▶"}
-                </button>
-                {shopProd&&playing&&(
-                  <div className="shop-ov" onClick={()=>{setShowProd(true);setPlaying(false);}}>
-                    {shopProd.primaryImage&&<img className="shop-ov-img" src={shopProd.primaryImage} alt={shopProd.name}/>}
-                    <div>
-                      <div style={{fontFamily:"var(--fc)",fontSize:10,color:"var(--gold)",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}}>Featured Product</div>
-                      <div style={{fontFamily:"var(--fc)",fontSize:14,fontWeight:600,color:"var(--white)"}}>{shopProd.name}</div>
-                      <div style={{fontFamily:"var(--fc)",fontSize:13,color:"var(--gold)",fontWeight:700}}>{fp(shopProd.price)}</div>
-                    </div>
-                    <button className="shop-ov-btn">Shop Now</button>
-                  </div>
-                )}
-              </div>
-              <div className="pcontrols">
-                <div className="pbar" onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setProgress(((e.clientX-r.left)/r.width)*100);}}>
-                  <div className="pfill" style={{width:progress+"%"}}/>
-                </div>
-                <div className="pcrow">
-                  <div style={{display:"flex",gap:4}}>
-                    <button className="cbtn" onClick={()=>setPlaying(!playing)}>{playing?"⏸":"▶"}</button>
-                    <button className="cbtn">🔊</button>
-                  </div>
-                  <span>{video.duration}</span>
-                  <button className="cbtn">⛶</button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-        {/* DOCKED BAR — directly below video, always in view */}
-        {dockedProd&&(
-          <div
-            style={{background:"var(--surface)",borderTop:"2px solid var(--gold)",borderBottom:"1px solid var(--border)",padding:"10px 14px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",flexShrink:0}}
-            onClick={()=>{setShowProd(true);muxRef.current?.pause();}}
-          >
-            {dockedProd.primaryImage
-              ?<img src={dockedProd.primaryImage} alt={dockedProd.name} style={{width:44,height:44,borderRadius:4,objectFit:"cover",flexShrink:0}}/>
-              :<div style={{width:44,height:44,borderRadius:4,background:"var(--surface3)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>📦</div>
-            }
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontFamily:"var(--fc)",fontSize:10,color:"var(--gold)",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",marginBottom:2}}>🛍 Shoppable</div>
-              <div style={{fontFamily:"var(--fc)",fontSize:13,fontWeight:600,color:"var(--white)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{dockedProd.name}</div>
-              <div style={{fontFamily:"var(--fc)",fontSize:12,color:"var(--gold)",fontWeight:700}}>{fp(dockedProd.price)}</div>
-            </div>
-            <div style={{display:"flex",gap:6,flexShrink:0}}>
-              <button className="shop-ov-btn" onClick={e=>{e.stopPropagation();setShowProd(true);muxRef.current?.pause();}}>Shop Now</button>
-              <button onClick={e=>{e.stopPropagation();setDockedProd(null);}} style={{padding:"6px 8px",borderRadius:3,background:"rgba(255,255,255,.08)",border:"1px solid var(--border2)",color:"var(--gray)",cursor:"pointer",fontSize:12}}>✕</button>
-            </div>
+      {/* VIDEO — flex:1, fills all space between header and bottom bar */}
+      <div style={{flex:1,minHeight:0,background:"#000",overflow:"hidden"}}>
+        {showAd ? (
+          <div className="player-stage" style={{height:"100%"}}>
+            <PreRoll onSkip={handleSkipAd} onImpression={()=>onImpression?.({type:"pre-roll",campaignId:"cam1"})}/>
+          </div>
+        ) : video.muxPlaybackId ? (
+          <MuxPlayer
+            ref={muxRef}
+            playbackId={video.muxPlaybackId}
+            streamType="on-demand"
+            autoPlay={false}
+            accentColor="#C0272D"
+            style={{width:"100%",height:"100%",display:"block"}}
+            onTimeUpdate={handleTimeUpdate}
+            onPlay={()=>setPlaying(true)}
+            onPause={()=>setPlaying(false)}
+          />
+        ) : (
+          <div className="player-stage" style={{height:"100%"}}>
+            <div style={{fontFamily:"var(--fd)",fontSize:"clamp(16px,4vw,24px)",fontWeight:600,color:"var(--white)",padding:"0 20px",textAlign:"center"}}>{video.title}</div>
+            <button className="p-play" style={playing?{background:"rgba(255,255,255,.1)"}:{}} onClick={()=>setPlaying(!playing)}>{playing?"⏸":"▶"}</button>
           </div>
         )}
-        {/* Video info — scrollable area below */}
-        <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
-          <div style={{padding:"10px 14px",borderTop:"1px solid var(--border)"}}>
-            <div style={{fontFamily:"var(--fd)",fontSize:16,fontWeight:600,color:"var(--white)",marginBottom:2}}>{video.title}</div>
-            <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              {video.creator&&<span style={{fontFamily:"var(--fc)",fontSize:11,color:"var(--gray)"}}>{video.creator}</span>}
-              {video.category&&<span style={{fontFamily:"var(--fc)",fontSize:11,color:"var(--gray2)"}}>{video.category}</span>}
+      </div>
+
+      {/* BOTTOM BAR — always 64px, shows product or video info */}
+      <div style={{
+        flexShrink:0,height:64,
+        background:dockedProd?"#111":"#000",
+        borderTop:dockedProd?"2px solid var(--gold)":"1px solid #2a2a2a",
+        display:"flex",alignItems:"center",gap:10,padding:"0 14px",
+        paddingBottom:"env(safe-area-inset-bottom,0px)",
+      }}>
+        {dockedProd ? (
+          <>
+            <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>{setShowProd(true);muxRef.current?.pause();}}>
+              {dockedProd.primaryImage
+                ?<img src={dockedProd.primaryImage} alt={dockedProd.name} style={{width:40,height:40,borderRadius:4,objectFit:"cover",flexShrink:0}}/>
+                :<div style={{width:40,height:40,borderRadius:4,background:"#222",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>📦</div>
+              }
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontFamily:"var(--fc)",fontSize:9,color:"var(--gold)",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}}>🛍 Shoppable</div>
+                <div style={{fontFamily:"var(--fc)",fontSize:12,fontWeight:600,color:"var(--white)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{dockedProd.name}</div>
+                <div style={{fontFamily:"var(--fc)",fontSize:11,color:"var(--gold)",fontWeight:700}}>{fp(dockedProd.price)}</div>
+              </div>
             </div>
-          </div>
-          <div style={{height:80}}/>
-        </div>
+            <button style={{padding:"6px 12px",background:"var(--gold)",color:"#000",border:"none",borderRadius:3,fontFamily:"var(--fc)",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}} onClick={()=>{setShowProd(true);muxRef.current?.pause();}}>Shop</button>
+            <button onClick={e=>{e.stopPropagation();setDockedProd(null);}} style={{padding:"6px 8px",background:"rgba(255,255,255,.08)",border:"1px solid #333",color:"#888",cursor:"pointer",fontSize:12,borderRadius:3,flexShrink:0}}>✕</button>
+          </>
+        ) : (
+          <>
+            <div style={{fontFamily:"var(--fc)",fontSize:12,fontWeight:600,color:"var(--white)",flex:1,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{video.title}</div>
+            {video.creator&&<span style={{fontFamily:"var(--fc)",fontSize:11,color:"#888",flexShrink:0}}>{video.creator}</span>}
+          </>
+        )}
       </div>
       {/* FEATURED CARD — fixed bottom of screen, slides up for 3s then moves to docked bar */}
       {shopProd&&(
