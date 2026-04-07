@@ -94,6 +94,7 @@ async function saveVideoProducts(videoId, products) {
       shopify_handle: p.shopify_handle,
       product_name: p.product_name,
       timestamp_seconds: parseInt(p.timestamp_seconds) || 0,
+      duration_seconds: parseInt(p.duration_seconds) || 8,
     }))
   );
   if (error) throw error;
@@ -293,6 +294,7 @@ function ProductPicker({ products, onPick, onClose }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
   const [timestamp, setTimestamp] = useState("");
+  const [duration, setDuration] = useState("8");
 
   const filtered = query.length > 1
     ? products.filter(p => p.title.toLowerCase().includes(query.toLowerCase()))
@@ -337,37 +339,45 @@ function ProductPicker({ products, onPick, onClose }) {
               </div>
             </div>
             <div className="ts-input-wrap">
-              <label className="ts-label">At what timestamp should this product appear? (mm:ss)</label>
-              <div className="ts-row">
-                <input
-                  className="ts-input"
-                  placeholder="e.g. 1:30 or 90"
-                  value={timestamp}
-                  onChange={e => setTimestamp(e.target.value)}
-                  autoFocus
-                />
-                <button className="ts-confirm" onClick={() => {
-                  // Parse mm:ss or raw seconds
-                  let secs = 0;
-                  if (timestamp.includes(":")) {
-                    const [m, s] = timestamp.split(":");
-                    secs = parseInt(m) * 60 + parseInt(s || 0);
-                  } else {
-                    secs = parseInt(timestamp) || 0;
-                  }
-                  onPick({
-                    shopify_product_id: selected.id,
-                    shopify_handle: selected.handle,
-                    product_name: selected.title,
-                    timestamp_seconds: secs,
-                    _image: selected.image,
-                  });
-                }}>
-                  Tag Product
-                </button>
-              </div>
+              <label className="ts-label">Timestamp — when should this appear? (mm:ss)</label>
+              <input
+                className="ts-input"
+                placeholder="e.g. 1:30 or 90"
+                value={timestamp}
+                onChange={e => setTimestamp(e.target.value)}
+                autoFocus
+                style={{width:"100%",marginBottom:10}}
+              />
+              <label className="ts-label" style={{marginTop:8}}>Duration — how long to show it? (seconds, default 8)</label>
+              <input
+                className="ts-input"
+                placeholder="e.g. 8"
+                value={duration}
+                onChange={e => setDuration(e.target.value)}
+                style={{width:"100%",marginBottom:10}}
+              />
+              <button className="ts-confirm" style={{width:"100%"}} onClick={() => {
+                let secs = 0;
+                if (timestamp.includes(":")) {
+                  const [m, s] = timestamp.split(":");
+                  secs = parseInt(m) * 60 + parseInt(s || 0);
+                } else {
+                  secs = parseInt(timestamp) || 0;
+                }
+                onPick({
+                  shopify_product_id: selected.id,
+                  shopify_handle: selected.handle,
+                  product_name: selected.title,
+                  timestamp_seconds: secs,
+                  duration_seconds: parseInt(duration) || 8,
+                  _image: selected.image,
+                });
+              }}>
+                Tag Product
+              </button>
               <div style={{ marginTop: 8, fontSize: 11, color: "var(--gray)" }}>
-                Enter as mm:ss (e.g. 1:30) or total seconds (e.g. 90)
+                Timestamp: mm:ss (e.g. 1:30) or seconds (e.g. 90)<br/>
+                Duration: how many seconds the card stays visible
               </div>
             </div>
             <button onClick={() => setSelected(null)} style={{ marginTop: 12, background: "none", border: "none", color: "var(--gray)", cursor: "pointer", fontFamily: "var(--fc)", fontSize: 12, fontWeight: 600, letterSpacing: ".5px", textTransform: "uppercase" }}>
@@ -390,15 +400,21 @@ function VideoEditPanel({ video, shopifyProducts, onSave, onClose }) {
     category: video.category || "",
     description: video.description || "",
   });
-  const [taggedProducts, setTaggedProducts] = useState(
-    (video.video_products || []).map(vp => ({
-      shopify_product_id: vp.shopify_product_id,
-      shopify_handle: vp.shopify_handle,
-      product_name: vp.product_name,
-      timestamp_seconds: vp.timestamp_seconds,
-      _image: shopifyProducts.find(p => p.id === vp.shopify_product_id)?.image || null,
-    }))
-  );
+  const [taggedProducts, setTaggedProducts] = useState([]);
+
+  // Sync tagged products whenever video.video_products changes
+  useEffect(()=>{
+    setTaggedProducts(
+      (video.video_products || []).map(vp => ({
+        shopify_product_id: vp.shopify_product_id,
+        shopify_handle: vp.shopify_handle,
+        product_name: vp.product_name,
+        timestamp_seconds: vp.timestamp_seconds,
+        duration_seconds: vp.duration_seconds || 8,
+        _image: shopifyProducts.find(p => p.id === vp.shopify_product_id)?.image || null,
+      }))
+    );
+  },[video.id, video.video_products]);
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -531,7 +547,7 @@ function VideoEditPanel({ video, shopifyProducts, onSave, onClose }) {
                   }
                   <div className="tag-row-info">
                     <div className="tag-row-name">{tp.product_name}</div>
-                    <div className="tag-row-ts">⏱ {fmtTimestamp(tp.timestamp_seconds)}</div>
+                    <div className="tag-row-ts">⏱ {fmtTimestamp(tp.timestamp_seconds)} · {tp.duration_seconds||8}s visible</div>
                   </div>
                   <button className="tag-rm" onClick={() => setTaggedProducts(prev => prev.filter((_, idx) => idx !== i))}>✕</button>
                 </div>

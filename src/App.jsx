@@ -206,13 +206,14 @@ const styles = `
 
   .modal{position:fixed;inset:0;z-index:200;background:#000;display:flex;flex-direction:column;animation:fi .2s ease}
   @keyframes fi{from{opacity:0}to{opacity:1}}
-  .mhdr{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0;min-height:48px}
-  .mclose{background:none;border:none;cursor:pointer;color:var(--gray);font-size:20px;padding:4px;display:flex;align-items:center}
+  .mhdr{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0;min-height:48px;background:#000}
+  .mclose{background:none;border:none;cursor:pointer;color:var(--gray);font-size:22px;padding:4px;display:flex;align-items:center;flex-shrink:0}
   .mclose:hover{color:var(--white)}
-  .mtitle{font-family:var(--fc);font-size:14px;font-weight:600;color:var(--white);flex:1;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
-  .mbody{flex:1;overflow-y:auto;display:flex;flex-direction:column}
-  .mux-wrap{width:100%;background:#000;flex-shrink:0}
-  .mux-wrap mux-player{width:100%;display:block}
+  .mtitle{font-family:var(--fc);font-size:14px;font-weight:600;color:var(--white);flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .mbody{flex:1;overflow-y:auto;display:flex;flex-direction:column;background:#000}
+  .mux-wrap{width:100%;background:#000;flex-shrink:0;line-height:0}
+  .mux-wrap mux-player,
+  .mux-wrap mux-player::part(media){width:100%!important;display:block!important}
 
   .pdtl{padding:16px}
   .pdtl-img{aspect-ratio:1;background:#fff;border-radius:8px;overflow:hidden;margin-bottom:16px;display:flex;align-items:center;justify-content:center}
@@ -287,8 +288,8 @@ const styles = `
   .shop-ov-btn{padding:6px 14px;border-radius:3px;background:var(--gold);color:#000;border:none;cursor:pointer;font-family:var(--fc);font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap}
   .shop-ov-img{width:48px;height:48px;border-radius:4px;object-fit:cover;flex-shrink:0}
   .shop-ov-btn{margin-left:auto;padding:6px 14px;border-radius:3px;background:var(--gold);color:#000;border:none;cursor:pointer;font-family:var(--fc);font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap}
-  .preroll{position:absolute;inset:0;z-index:10;background:var(--black);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
-  .pr-skip{position:absolute;bottom:12px;right:12px;padding:6px 14px;border-radius:3px;background:rgba(255,255,255,.1);border:1px solid var(--border2);color:var(--white);font-family:var(--fc);font-size:12px;font-weight:600;cursor:pointer}
+  .preroll{position:fixed;inset:0;z-index:250;background:var(--black);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px}
+  .pr-skip{margin-top:12px;padding:12px 28px;border-radius:4px;background:var(--red);border:none;color:var(--white);font-family:var(--fc);font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.5px;text-transform:uppercase}
 
   .ad-infeed{margin:16px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:12px 14px;display:flex;gap:12px;align-items:center}
   .ad-lbl{font-family:var(--fc);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin-bottom:4px}
@@ -428,22 +429,23 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
                 streamType="on-demand"
                 autoPlay={false}
                 accentColor="#C0272D"
-                style={{width:"100%",display:"block"}}
+                style={{width:"100%",display:"block",aspectRatio:"unset"}}
                 onTimeUpdate={e=>{
                   const el = e.target;
                   if(!el || !el.duration || el.currentTime < 0.5) return;
                   const currentSec = el.currentTime;
-                  // Check tagged products — only fire if not already fired
                   if(video.taggedProducts?.length > 0){
                     video.taggedProducts.forEach(tp=>{
                       const ts = Number(tp.timestamp_seconds);
+                      // duration_seconds controls how long the card shows (default 8s)
+                      const dur = Number(tp.duration_seconds || 8);
                       if(fired.current.has(ts)) return;
-                      if(currentSec >= ts && currentSec <= ts + 3){
+                      if(currentSec >= ts && currentSec <= ts + dur){
                         const prod = products.find(p=>p.handle===tp.shopify_handle);
                         if(prod){
                           fired.current.add(ts);
                           setShopProd(prod);
-                          setDockedProd(null); // reset docked when new product fires
+                          setDockedProd(null);
                         }
                       }
                     });
@@ -645,7 +647,14 @@ function Cart({items, onClose, onRemove}) {
             <div className="ctotal-lbl">Subtotal</div>
             <div className="ctotal-val">{fp(total)}</div>
           </div>
-          <button className="co-btn" onClick={()=>window.open(`https://${SHOPIFY_DOMAIN}/cart`,'_blank')}>
+          <button className="co-btn" onClick={()=>{
+            // Build Shopify cart URL with all line items pre-populated
+            const lineItems = items.map(item=>`${item.variantNumericId}:${item.qty}`).join(',');
+            const url = lineItems
+              ? `https://${SHOPIFY_DOMAIN}/cart/${lineItems}`
+              : `https://${SHOPIFY_DOMAIN}/cart`;
+            window.open(url,'_blank');
+          }}>
             Checkout on Shopify →
           </button>
         </div>
@@ -732,6 +741,7 @@ function VODTab({onSelect, history, dbVideos=[]}) {
     taggedProducts: (v.video_products||[]).map(vp=>({
       shopify_handle: vp.shopify_handle,
       timestamp_seconds: vp.timestamp_seconds,
+      duration_seconds: vp.duration_seconds || 8,
       product_name: vp.product_name,
     })),
   });
@@ -1098,10 +1108,14 @@ export default function App() {
       const key = variant?.id||product.id;
       const exists = prev.find(i=>i.key===key);
       if(exists) return prev.map(i=>i.key===key?{...i,qty:i.qty+1}:i);
+      // Extract numeric variant ID for Shopify cart URL (gid://shopify/ProductVariant/12345 -> 12345)
+      const rawId = variant?.id || product.defaultVariant?.id || "";
+      const numericId = rawId.includes("/") ? rawId.split("/").pop() : rawId;
       return [...prev,{
         key, id:product.id, name:product.name,
         price:parseFloat(variant?.price||product.price),
         varTitle:variant?.title||"Default Title",
+        variantNumericId: numericId,
         image:product.primaryImage, qty:1,
       }];
     });
