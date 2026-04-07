@@ -93,7 +93,7 @@ async function saveVideoProducts(videoId, products) {
       shopify_product_id: p.shopify_product_id,
       shopify_handle: p.shopify_handle,
       product_name: p.product_name,
-      timestamp_seconds: parseInt(p.timestamp_seconds) || 0,
+      timestamp_seconds: (() => { const n = parseInt(p.timestamp_seconds); return isNaN(n) ? 0 : n; })(),
       duration_seconds: parseInt(p.duration_seconds) || 8,
     }))
   );
@@ -143,9 +143,20 @@ const fmtDuration = (secs) => {
 };
 
 const fmtTimestamp = (secs) => {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
+  const n = parseInt(secs) || 0;
+  const m = Math.floor(n / 60);
+  const s = n % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
+};
+
+const parseTimestamp = (val) => {
+  if (!val && val !== 0) return 0;
+  const str = String(val).trim();
+  if (str.includes(":")) {
+    const [m, s] = str.split(":");
+    return (parseInt(m) || 0) * 60 + (parseInt(s) || 0);
+  }
+  return parseInt(str) || 0;
 };
 
 // ============================================================
@@ -357,13 +368,7 @@ function ProductPicker({ products, onPick, onClose }) {
                 style={{width:"100%",marginBottom:10}}
               />
               <button className="ts-confirm" style={{width:"100%"}} onClick={() => {
-                let secs = 0;
-                if (timestamp.includes(":")) {
-                  const [m, s] = timestamp.split(":");
-                  secs = parseInt(m) * 60 + parseInt(s || 0);
-                } else {
-                  secs = parseInt(timestamp) || 0;
-                }
+                const secs = parseTimestamp(timestamp);
                 onPick({
                   shopify_product_id: selected.id,
                   shopify_handle: selected.handle,
@@ -418,6 +423,9 @@ function VideoEditPanel({ video, shopifyProducts, onSave, onClose }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[video.id, vpKey]);
   const [showPicker, setShowPicker] = useState(false);
+  const [editingTagIdx, setEditingTagIdx] = useState(null);
+  const [editTs, setEditTs] = useState("");
+  const [editDur, setEditDur] = useState("");
   const [saving, setSaving] = useState(false);
 
   const categories = ["Breaks", "Market News", "Interviews", "How-To", "Investing"];
@@ -540,18 +548,72 @@ function VideoEditPanel({ video, shopifyProducts, onSave, onClose }) {
             <div className="empty-tags">No products tagged yet — add products to create shoppable moments</div>
           ) : (
             [...taggedProducts]
-              .sort((a, b) => a.timestamp_seconds - b.timestamp_seconds)
+              .sort((a, b) => (parseInt(a.timestamp_seconds)||0) - (parseInt(b.timestamp_seconds)||0))
               .map((tp, i) => (
-                <div key={i} className="tag-row">
-                  {tp._image
-                    ? <img className="tag-row-img" src={tp._image} alt={tp.product_name} />
-                    : <div className="tag-row-img-ph">📦</div>
-                  }
-                  <div className="tag-row-info">
-                    <div className="tag-row-name">{tp.product_name}</div>
-                    <div className="tag-row-ts">⏱ {fmtTimestamp(tp.timestamp_seconds)} · {tp.duration_seconds||8}s visible</div>
+                <div key={i} className="tag-row" style={{flexDirection:"column",alignItems:"stretch",gap:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    {tp._image
+                      ? <img className="tag-row-img" src={tp._image} alt={tp.product_name} />
+                      : <div className="tag-row-img-ph">📦</div>
+                    }
+                    <div className="tag-row-info" style={{flex:1}}>
+                      <div className="tag-row-name">{tp.product_name}</div>
+                      <div className="tag-row-ts">⏱ {fmtTimestamp(tp.timestamp_seconds)} · {tp.duration_seconds||8}s visible</div>
+                    </div>
+                    <div style={{display:"flex",gap:4,flexShrink:0}}>
+                      <button
+                        style={{padding:"4px 8px",background:"var(--surface3)",border:"1px solid var(--border2)",borderRadius:3,color:"var(--gold)",fontFamily:"var(--fc)",fontSize:10,fontWeight:700,cursor:"pointer",letterSpacing:".5px",textTransform:"uppercase"}}
+                        onClick={()=>{
+                          setEditingTagIdx(editingTagIdx===i?null:i);
+                          setEditTs(fmtTimestamp(tp.timestamp_seconds));
+                          setEditDur(String(tp.duration_seconds||8));
+                        }}
+                      >
+                        {editingTagIdx===i?"Cancel":"Edit"}
+                      </button>
+                      <button className="tag-rm" onClick={()=>{
+                        setTaggedProducts(prev=>prev.filter((_,idx)=>idx!==i));
+                        if(editingTagIdx===i) setEditingTagIdx(null);
+                      }}>✕</button>
+                    </div>
                   </div>
-                  <button className="tag-rm" onClick={() => setTaggedProducts(prev => prev.filter((_, idx) => idx !== i))}>✕</button>
+                  {editingTagIdx===i&&(
+                    <div style={{background:"var(--surface3)",borderRadius:4,padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                        <div>
+                          <label style={{display:"block",fontFamily:"var(--fc)",fontSize:10,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",color:"var(--gray)",marginBottom:4}}>Timestamp (mm:ss)</label>
+                          <input
+                            value={editTs}
+                            onChange={e=>setEditTs(e.target.value)}
+                            placeholder="e.g. 1:30"
+                            style={{width:"100%",padding:"7px 10px",background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:3,color:"var(--white)",fontFamily:"var(--fb)",fontSize:13,outline:"none"}}
+                          />
+                        </div>
+                        <div>
+                          <label style={{display:"block",fontFamily:"var(--fc)",fontSize:10,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",color:"var(--gray)",marginBottom:4}}>Duration (secs)</label>
+                          <input
+                            value={editDur}
+                            onChange={e=>setEditDur(e.target.value)}
+                            placeholder="8"
+                            style={{width:"100%",padding:"7px 10px",background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:3,color:"var(--white)",fontFamily:"var(--fb)",fontSize:13,outline:"none"}}
+                          />
+                        </div>
+                      </div>
+                      <button
+                        style={{padding:"8px",background:"var(--red)",border:"none",borderRadius:3,color:"var(--white)",fontFamily:"var(--fc)",fontSize:12,fontWeight:700,cursor:"pointer",letterSpacing:".5px",textTransform:"uppercase"}}
+                        onClick={()=>{
+                          const newTs = parseTimestamp(editTs);
+                          const newDur = parseInt(editDur)||8;
+                          setTaggedProducts(prev=>prev.map((p,idx)=>
+                            idx===i ? {...p, timestamp_seconds:newTs, duration_seconds:newDur} : p
+                          ));
+                          setEditingTagIdx(null);
+                        }}
+                      >
+                        Update Timestamp
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))
           )}
