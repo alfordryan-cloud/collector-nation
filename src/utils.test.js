@@ -211,3 +211,27 @@ describe('normalizeShopifyProduct', () => {
     expect(typeof p.id).toBe('string')
   })
 })
+
+// ============================================================
+// Regression: variables that caused white screen crashes
+// ============================================================
+describe('regressions', () => {
+  it('fmtPrice handles all falsy inputs without throwing', () => {
+    expect(() => fmtPrice(null)).not.toThrow()
+    expect(() => fmtPrice(undefined)).not.toThrow()
+    expect(() => fmtPrice(0)).not.toThrow()
+    expect(() => fmtPrice("")).not.toThrow()
+    expect(() => fmtPrice("49.99")).not.toThrow()
+  })
+
+  it('parseTimestamp never throws', () => {
+    const inputs = [null, undefined, "", "abc", "1:30", 90, "0", NaN, {}, []]
+    inputs.forEach(v => expect(() => parseTimestamp(v)).not.toThrow())
+  })
+
+  it('getProductToFire never throws with bad inputs', () => {
+    expect(() => getProductToFire(null, null, new Set())).not.toThrow()
+    expect(() => getProductToFire(10, undefined, new Set())).not.toThrow()
+    expect(() => getProductToFire(10, [], null)).not.toThrow()
+  })
+})
