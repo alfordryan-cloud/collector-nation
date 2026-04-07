@@ -229,6 +229,16 @@ describe('regressions', () => {
     inputs.forEach(v => expect(() => parseTimestamp(v)).not.toThrow())
   })
 
+  it('buildShopifyCartUrl handles numeric variant IDs from products.json', () => {
+    // Shopify products.json returns numeric IDs not gid:// strings
+    const items = [
+      { variantNumericId: String(49883728), qty: 1 },
+      { variantNumericId: String(67291034), qty: 2 },
+    ]
+    expect(buildShopifyCartUrl('collector-station.myshopify.com', items))
+      .toBe('https://collector-station.myshopify.com/cart/49883728:1,67291034:2')
+  })
+
   it('getProductToFire never throws with bad inputs', () => {
     expect(() => getProductToFire(null, null, new Set())).not.toThrow()
     expect(() => getProductToFire(10, undefined, new Set())).not.toThrow()

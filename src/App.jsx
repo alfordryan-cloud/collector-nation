@@ -1105,7 +1105,8 @@ export default function App() {
       const exists = prev.find(i=>i.key===key);
       if(exists) return prev.map(i=>i.key===key?{...i,qty:i.qty+1}:i);
       // Extract numeric variant ID for Shopify cart URL (gid://shopify/ProductVariant/12345 -> 12345)
-      const rawId = variant?.id || product.defaultVariant?.id || "";
+      // Shopify products.json returns numeric IDs, not gid:// strings
+      const rawId = String(variant?.id || product.defaultVariant?.id || "");
       const numericId = rawId.includes("/") ? rawId.split("/").pop() : rawId;
       return [...prev,{
         key, id:product.id, name:product.name,
