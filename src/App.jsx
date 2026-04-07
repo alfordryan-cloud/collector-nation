@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { parseTimestamp, fmtTimestamp, fmtPrice as fp, getProductToFire, buildShopifyCartUrl, normalizeShopifyProduct } from "./utils.js";
 import { createClient } from "@supabase/supabase-js";
 import MuxPlayer from "@mux/mux-player-react";
@@ -331,6 +331,27 @@ const pct = (a,b) => b>0?Math.min(100,Math.round((a/b)*100)):0;
 
 function Toast({msg}){ return msg?<div className="toast">{msg}</div>:null; }
 
+class ErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state={error:null}; }
+  static getDerivedStateFromError(e){ return {error:e}; }
+  render(){
+    if(this.state.error){
+      return (
+        <div className="modal" style={{zIndex:400,padding:24,display:"flex",flexDirection:"column",gap:12,alignItems:"center",justifyContent:"center"}}>
+          <div style={{fontFamily:"var(--fd)",fontSize:20,color:"var(--red)"}}>Something went wrong</div>
+          <div style={{fontFamily:"var(--fb)",fontSize:12,color:"var(--gray)",textAlign:"center",maxWidth:280,wordBreak:"break-all"}}>
+            {this.state.error?.message||String(this.state.error)}
+          </div>
+          <button onClick={()=>{this.setState({error:null});this.props.onClose?.();}} style={{padding:"10px 20px",background:"var(--red)",color:"var(--white)",border:"none",borderRadius:4,fontFamily:"var(--fc)",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+            Close
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ============================================================
 // PRE-ROLL
 // ============================================================
@@ -507,11 +528,13 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
       )}
       {/* Product detail modal — works from both featured and docked */}
       {showProd&&(shopProd||dockedProd)&&(
-        <ProductDetail
-          product={shopProd||dockedProd}
-          onClose={()=>setShowProd(false)}
-          onAddToCart={onAddToCart}
-        />
+        <ErrorBoundary onClose={()=>setShowProd(false)}>
+          <ProductDetail
+            product={shopProd||dockedProd}
+            onClose={()=>setShowProd(false)}
+            onAddToCart={onAddToCart}
+          />
+        </ErrorBoundary>
       )}
     </div>
   );
@@ -521,10 +544,13 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
 // PRODUCT DETAIL
 // ============================================================
 function ProductDetail({product, onClose, onAddToCart}) {
-  const [selVar, setSelVar] = useState(product.variants?.find(v=>v.available)||product.variants?.[0]);
-  const avail = selVar?.available ?? product.available;
-  // Safely get display price — variants from products.json return price as string
-  const displayPrice = selVar?.price ? parseFloat(selVar.price) : product.price;
+  // Guard: if product is null/undefined, close immediately
+  if(!product) { onClose?.(); return null; }
+
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  const [selVar, setSelVar] = useState(variants.find(v=>v.available) || variants[0] || null);
+  const avail = selVar ? (selVar.available ?? false) : (product.available ?? false);
+  const displayPrice = selVar?.price ? parseFloat(selVar.price) : (product.price || 0);
   const invEl = !avail
     ? <span className="inv-out">Out of Stock</span>
     : <span className="inv-ok">In Stock</span>;
@@ -548,18 +574,18 @@ function ProductDetail({product, onClose, onAddToCart}) {
             {product.compareAtPrice&&<span className="pdtl-compare">{fp(product.compareAtPrice)}</span>}
           </div>
           <div className="pdtl-inv">{invEl} · Ships from Easley, SC</div>
-          {product.variants?.length>1&&(
+          {variants.length>1&&(
             <div style={{marginBottom:16}}>
               <div className="var-label">Option</div>
               <div className="var-pills">
-                {product.variants.map(v=>(
-                  <button key={v.id} className={`vpill${selVar?.id===v.id?" on":""}${!v.available?" na":""}`}
-                    onClick={()=>v.available&&setSelVar(v)}>{v.title}</button>
+                {variants.map(v=>(
+                  <button key={v.id||v.title} className={`vpill${selVar?.id===v.id?" on":""}${!v.available?" na":""}`}
+                    onClick={()=>v.available&&setSelVar(v)}>{v.title||"Default"}</button>
                 ))}
               </div>
             </div>
           )}
-          {product.description&&<div className="pdtl-desc">{product.description.slice(0,280)}{product.description.length>280?"…":""}</div>}
+          {product.description&&<div className="pdtl-desc" dangerouslySetInnerHTML={undefined}>{String(product.description).slice(0,280)}{product.description.length>280?"…":""}</div>}
           <button className="atc-btn" disabled={!avail}
             onClick={()=>{
               try {
@@ -1138,7 +1164,7 @@ export default function App() {
         </div>
 
         {selVideo&&<VideoPlayer video={selVideo} products={products} onClose={()=>setSelVideo(null)} onAddToCart={handleAddToCart} onImpression={handleImpression}/>}
-        {selProduct&&!selVideo&&<ProductDetail product={selProduct} onClose={()=>setSelProduct(null)} onAddToCart={handleAddToCart}/>}
+        {selProduct&&!selVideo&&<ErrorBoundary onClose={()=>setSelProduct(null)}><ProductDetail product={selProduct} onClose={()=>setSelProduct(null)} onAddToCart={handleAddToCart}/></ErrorBoundary>}
         {showCart&&<Cart items={cart} onClose={()=>setShowCart(false)} onRemove={handleRemoveFromCart}/>}
         <Toast msg={toast}/>
       </div>
