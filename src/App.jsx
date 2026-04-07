@@ -125,11 +125,14 @@ const styles = `
     --gold:#C9A84C;--white:#f0f0f0;--gray:#888;--gray2:#555;--live:#00c853;
     --fd:'Oswald',sans-serif;--fc:'Barlow Condensed',sans-serif;--fb:'Barlow',sans-serif;
   }
-  html,body,#root{height:100%;background:var(--black);color:var(--white);font-family:var(--fb);font-size:14px;-webkit-font-smoothing:antialiased}
+  html,body,#root{height:100%;background:var(--black);color:var(--white);font-family:var(--fb);font-size:14px;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  html{-webkit-text-size-adjust:100%}
+  body{overscroll-behavior:none}
   ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--surface)}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
-  .app{display:flex;flex-direction:column;min-height:100vh}
+  .app{display:flex;flex-direction:column;min-height:100vh;min-height:100dvh}
 
-  .nav{position:sticky;top:0;z-index:100;background:var(--black);border-bottom:1px solid var(--border);padding:0 16px;height:56px;display:flex;align-items:center;gap:12px}
+  .nav{position:sticky;top:0;z-index:100;background:var(--black);border-bottom:1px solid var(--border);padding:0 16px;height:52px;display:flex;align-items:center;gap:12px}
+  @media(max-width:640px){.nav-tabs{display:none!important}}
   .nav-logo{font-family:var(--fd);font-size:20px;font-weight:700;letter-spacing:1px;display:flex;align-items:center;gap:4px;flex-shrink:0}
   .nav-logo .r{color:var(--red)}.nav-logo .g{color:var(--gold);font-size:22px}
   .nav-tabs{display:flex;gap:2px;overflow-x:auto;flex:1;scrollbar-width:none}
@@ -204,16 +207,15 @@ const styles = `
   .skel-line.s{width:60%}
   @keyframes sh{0%,100%{opacity:1}50%{opacity:.5}}
 
-  .modal{position:fixed;inset:0;z-index:200;background:#000;display:flex;flex-direction:column;animation:fi .2s ease}
+  .modal{position:fixed;inset:0;z-index:200;background:#000;display:flex;flex-direction:column;animation:fi .15s ease}
   @keyframes fi{from{opacity:0}to{opacity:1}}
-  .mhdr{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0;min-height:48px;background:#000}
-  .mclose{background:none;border:none;cursor:pointer;color:var(--gray);font-size:22px;padding:4px;display:flex;align-items:center;flex-shrink:0}
-  .mclose:hover{color:var(--white)}
-  .mtitle{font-family:var(--fc);font-size:14px;font-weight:600;color:var(--white);flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-  .mbody{flex:1;overflow-y:auto;display:flex;flex-direction:column;background:#000}
-  .mux-wrap{width:100%;background:#000;flex-shrink:0;line-height:0}
-  .mux-wrap mux-player,
-  .mux-wrap mux-player::part(media){width:100%!important;display:block!important}
+  .mhdr{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;height:48px;background:#000}
+  .mclose{background:none;border:none;cursor:pointer;color:var(--gray);font-size:22px;padding:4px 8px;display:flex;align-items:center;flex-shrink:0;-webkit-tap-highlight-color:transparent}
+  .mclose:active{color:var(--white)}
+  .mtitle{font-family:var(--fc);font-size:13px;font-weight:600;color:var(--white);flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .mbody{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;background:#000}
+  .mux-wrap{width:100%;background:#000;flex-shrink:0;line-height:0;max-height:calc(100dvh - 48px - 120px)}
+  .mux-wrap mux-player{width:100%!important;display:block!important;max-height:calc(100dvh - 48px - 120px)!important}
 
   .pdtl{padding:16px}
   .pdtl-img{aspect-ratio:1;background:#fff;border-radius:8px;overflow:hidden;margin-bottom:16px;display:flex;align-items:center;justify-content:center}
@@ -333,7 +335,7 @@ const styles = `
 
   .err-banner{margin:16px;background:rgba(192,39,45,.1);border:1px solid var(--red-dim);border-radius:6px;padding:12px 14px;font-family:var(--fc);font-size:13px;color:var(--white);line-height:1.6}
 
-  .bnav{position:fixed;bottom:0;left:0;right:0;z-index:90;background:var(--black);border-top:1px solid var(--border);display:flex;height:56px}
+  .bnav{position:fixed;bottom:0;left:0;right:0;z-index:90;background:var(--black);border-top:1px solid var(--border);display:flex;height:calc(56px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom)}
   .bnav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;background:none;border:none;font-family:var(--fc);font-size:9px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--gray);transition:color .15s}
   .bnav-item.on{color:var(--red)}
   .bicon{font-size:18px}
@@ -382,29 +384,56 @@ function PreRoll({onSkip, onImpression}) {
 function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
   const [playing, setPlaying] = useState(false);
   const [showAd, setShowAd] = useState(true);
-  const [shopProd, setShopProd] = useState(null);   // currently featured product
-  const [dockedProd, setDockedProd] = useState(null); // persists below video
+  const [shopProd, setShopProd] = useState(null);
+  const [dockedProd, setDockedProd] = useState(null);
   const [showProd, setShowProd] = useState(false);
   const muxRef = useRef(null);
   const dockTimer = useRef(null);
-  // Tracks timestamps already fired this session — prevents re-triggering
   const fired = useRef(new Set());
+  // Keep refs current for use inside event handlers
+  const shopProdRef = useRef(null);
+  const productsRef = useRef(products);
+  const videoRef = useRef(video);
+  useEffect(()=>{ shopProdRef.current = shopProd; },[shopProd]);
+  useEffect(()=>{ productsRef.current = products; },[products]);
+  useEffect(()=>{ videoRef.current = video; fired.current = new Set(); },[video.id]);
 
-  // When featured product appears, start 3s timer then move to docked bar
+  // When featured product set — move to docked after 3s
   useEffect(()=>{
     if(!shopProd) return;
     clearTimeout(dockTimer.current);
     dockTimer.current = setTimeout(()=>{
-      setDockedProd(shopProd); // move to persistent docked bar
-      setShopProd(null);       // dismiss featured card
+      setDockedProd(shopProd);
+      setShopProd(null);
     }, 3000);
     return ()=>clearTimeout(dockTimer.current);
-  },[shopProd]);
+  },[shopProd?.id]);
 
-  // Autoplay after ad skip
   const handleSkipAd = useCallback(()=>{
     setShowAd(false);
-    setTimeout(()=>{ muxRef.current?.play?.(); }, 100);
+    setTimeout(()=>{ muxRef.current?.play?.(); }, 150);
+  },[]);
+
+  const handleTimeUpdate = useCallback((e)=>{
+    const el = e.target;
+    if(!el || !el.duration || el.currentTime < 0.5) return;
+    // Skip if a featured product is already showing
+    if(shopProdRef.current) return;
+    const currentSec = el.currentTime;
+    const tagged = videoRef.current?.taggedProducts;
+    if(!tagged?.length) return;
+    tagged.forEach(tp=>{
+      const ts = Number(tp.timestamp_seconds);
+      if(fired.current.has(ts)) return;
+      if(currentSec >= ts){
+        const prod = productsRef.current?.find(p=>p.handle===tp.shopify_handle);
+        if(prod){
+          fired.current.add(ts);
+          setShopProd(prod);
+          setDockedProd(null);
+        }
+      }
+    });
   },[]);
 
   return (
@@ -430,27 +459,7 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
                 autoPlay={false}
                 accentColor="#C0272D"
                 style={{width:"100%",display:"block",aspectRatio:"unset"}}
-                onTimeUpdate={e=>{
-                  const el = e.target;
-                  if(!el || !el.duration || el.currentTime < 0.5) return;
-                  const currentSec = el.currentTime;
-                  if(video.taggedProducts?.length > 0){
-                    video.taggedProducts.forEach(tp=>{
-                      const ts = Number(tp.timestamp_seconds);
-                      // duration_seconds controls how long the card shows (default 8s)
-                      const dur = Number(tp.duration_seconds || 8);
-                      if(fired.current.has(ts)) return;
-                      if(currentSec >= ts && currentSec <= ts + dur){
-                        const prod = products.find(p=>p.handle===tp.shopify_handle);
-                        if(prod){
-                          fired.current.add(ts);
-                          setShopProd(prod);
-                          setDockedProd(null);
-                        }
-                      }
-                    });
-                  }
-                }}
+                onTimeUpdate={handleTimeUpdate}
                 onPlay={()=>setPlaying(true)}
                 onPause={()=>setPlaying(false)}
               />

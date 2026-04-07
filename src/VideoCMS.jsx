@@ -402,7 +402,8 @@ function VideoEditPanel({ video, shopifyProducts, onSave, onClose }) {
   });
   const [taggedProducts, setTaggedProducts] = useState([]);
 
-  // Sync tagged products whenever video.video_products changes
+  // Sync tagged products — use stringify for deep comparison so edits reload correctly
+  const vpKey = JSON.stringify((video.video_products||[]).map(v=>v.id));
   useEffect(()=>{
     setTaggedProducts(
       (video.video_products || []).map(vp => ({
@@ -414,7 +415,8 @@ function VideoEditPanel({ video, shopifyProducts, onSave, onClose }) {
         _image: shopifyProducts.find(p => p.id === vp.shopify_product_id)?.image || null,
       }))
     );
-  },[video.id, video.video_products]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[video.id, vpKey]);
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
