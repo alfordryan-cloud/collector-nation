@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { parseTimestamp, fmtTimestamp } from "./utils.js";
 import { createClient } from "@supabase/supabase-js";
 import * as UpChunk from "@mux/upchunk";
 
@@ -135,29 +136,7 @@ async function fetchShopifyProducts() {
 // ============================================================
 // FORMAT HELPERS
 // ============================================================
-const fmtDuration = (secs) => {
-  if (!secs) return "";
-  const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
-};
-
-const fmtTimestamp = (secs) => {
-  const n = parseInt(secs) || 0;
-  const m = Math.floor(n / 60);
-  const s = n % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-};
-
-const parseTimestamp = (val) => {
-  if (!val && val !== 0) return 0;
-  const str = String(val).trim();
-  if (str.includes(":")) {
-    const [m, s] = str.split(":");
-    return (parseInt(m) || 0) * 60 + (parseInt(s) || 0);
-  }
-  return parseInt(str) || 0;
-};
+const fmtDuration = fmtTimestamp; // alias
 
 // ============================================================
 // STYLES

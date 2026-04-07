@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { parseTimestamp, fmtTimestamp, fmtPrice as fp, getProductToFire, buildShopifyCartUrl, normalizeShopifyProduct } from "./utils.js";
 import { createClient } from "@supabase/supabase-js";
 import MuxPlayer from "@mux/mux-player-react";
 import VideoCMS from "./VideoCMS.jsx";
@@ -48,38 +49,15 @@ async function fetchShopifyProducts() {
   return data.products;
 }
 
-// Normalize Shopify product to our internal format
+// Normalize Shopify product — adds description, category, images array
 function normalizeProduct(p) {
-  const variant = p.variants?.[0];
-  const price = parseFloat(variant?.price || 0);
-  const compareAt = variant?.compare_at_price ? parseFloat(variant.compare_at_price) : null;
-  const inventory = p.variants?.reduce((s, v) => s + (v.inventory_quantity || 0), 0) ?? 0;
-  const available = p.variants?.some(v => v.available) ?? false;
-  const image = p.images?.[0]?.src || null;
-
-  const tags = Array.isArray(p.tags) ? p.tags : (p.tags ? p.tags.split(", ") : []);
-  let badge = null;
-  if (!available) badge = null;
-  else if (compareAt && compareAt > price) badge = "SALE";
-  else if (tags.includes("new")) badge = "NEW";
-  else if (tags.includes("hot") || tags.includes("trending")) badge = "HOT";
-
+  const base = normalizeShopifyProduct(p);
   return {
-    id: String(p.id),
-    handle: p.handle,
-    name: p.title,
+    ...base,
     description: p.body_html?.replace(/<[^>]+>/g, "") || "",
     vendor: p.vendor,
     category: p.product_type || "Products",
-    price,
-    compareAtPrice: compareAt,
-    available,
-    primaryImage: image,
     images: p.images?.map(i => i.src) || [],
-    variants: p.variants || [],
-    defaultVariant: variant,
-    badge,
-    tags,
   };
 }
 
@@ -348,7 +326,6 @@ const styles = `
   .hmeta{font-size:11px;color:var(--gray2)}
 `;
 
-const fp = (n) => `$${parseFloat(n).toFixed(2)}`;
 const fmt = (n) => n>=1e6?(n/1e6).toFixed(1)+"M":n>=1000?(n/1000).toFixed(0)+"K":String(n);
 const pct = (a,b) => b>0?Math.min(100,Math.round((a/b)*100)):0;
 
@@ -417,23 +394,20 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
   const handleTimeUpdate = useCallback((e)=>{
     const el = e.target;
     if(!el || !el.duration || el.currentTime < 0.5) return;
-    // Skip if a featured product is already showing
-    if(shopProdRef.current) return;
-    const currentSec = el.currentTime;
-    const tagged = videoRef.current?.taggedProducts;
-    if(!tagged?.length) return;
-    tagged.forEach(tp=>{
-      const ts = Number(tp.timestamp_seconds);
-      if(fired.current.has(ts)) return;
-      if(currentSec >= ts){
-        const prod = productsRef.current?.find(p=>p.handle===tp.shopify_handle);
-        if(prod){
-          fired.current.add(ts);
-          setShopProd(prod);
-          setDockedProd(null);
-        }
+    if(shopProdRef.current) return; // already showing a product
+    const tp = getProductToFire(
+      el.currentTime,
+      videoRef.current?.taggedProducts,
+      fired.current
+    );
+    if(tp){
+      const prod = productsRef.current?.find(p=>p.handle===tp.shopify_handle);
+      if(prod){
+        fired.current.add(parseInt(tp.timestamp_seconds)||0);
+        setShopProd(prod);
+        setDockedProd(null);
       }
-    });
+    }
   },[]);
 
   return (
@@ -657,12 +631,7 @@ function Cart({items, onClose, onRemove}) {
             <div className="ctotal-val">{fp(total)}</div>
           </div>
           <button className="co-btn" onClick={()=>{
-            // Build Shopify cart URL with all line items pre-populated
-            const lineItems = items.map(item=>`${item.variantNumericId}:${item.qty}`).join(',');
-            const url = lineItems
-              ? `https://${SHOPIFY_DOMAIN}/cart/${lineItems}`
-              : `https://${SHOPIFY_DOMAIN}/cart`;
-            window.open(url,'_blank');
+            window.open(buildShopifyCartUrl(SHOPIFY_DOMAIN, items), '_blank');
           }}>
             Checkout on Shopify →
           </button>
