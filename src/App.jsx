@@ -522,8 +522,9 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
 // ============================================================
 function ProductDetail({product, onClose, onAddToCart}) {
   const [selVar, setSelVar] = useState(product.variants?.find(v=>v.available)||product.variants?.[0]);
-  const [adding, setAdding] = useState(false);
   const avail = selVar?.available ?? product.available;
+  // Safely get display price — variants from products.json return price as string
+  const displayPrice = selVar?.price ? parseFloat(selVar.price) : product.price;
   const invEl = !avail
     ? <span className="inv-out">Out of Stock</span>
     : <span className="inv-ok">In Stock</span>;
@@ -543,7 +544,7 @@ function ProductDetail({product, onClose, onAddToCart}) {
           {product.vendor&&<div className="pdtl-vendor">{product.vendor}</div>}
           <div className="pdtl-name">{product.name}</div>
           <div className="pdtl-price">
-            {fp(selVar?.price||product.price)}
+            {fp(displayPrice)}
             {product.compareAtPrice&&<span className="pdtl-compare">{fp(product.compareAtPrice)}</span>}
           </div>
           <div className="pdtl-inv">{invEl} · Ships from Easley, SC</div>
@@ -559,9 +560,16 @@ function ProductDetail({product, onClose, onAddToCart}) {
             </div>
           )}
           {product.description&&<div className="pdtl-desc">{product.description.slice(0,280)}{product.description.length>280?"…":""}</div>}
-          <button className="atc-btn" disabled={adding||!avail}
-            onClick={async()=>{setAdding(true);await onAddToCart(product,selVar);setAdding(false);onClose();}}>
-            {adding?"Adding…":avail?"Add to Cart":"Out of Stock"}
+          <button className="atc-btn" disabled={!avail}
+            onClick={()=>{
+              try {
+                onAddToCart(product, selVar);
+                onClose();
+              } catch(e) {
+                console.error("Add to cart error:", e);
+              }
+            }}>
+            {avail?"Add to Cart":"Out of Stock"}
           </button>
           <button className="shopify-btn" onClick={()=>window.open(`https://${SHOPIFY_DOMAIN}/products/${product.handle}`,'_blank')}>
             View on Collector Station →
