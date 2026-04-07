@@ -386,16 +386,17 @@ function VideoEditPanel({ video, shopifyProducts, onSave, onClose }) {
   });
   const [taggedProducts, setTaggedProducts] = useState([]);
 
-  // Sync tagged products — use stringify for deep comparison so edits reload correctly
-  const vpKey = JSON.stringify((video.video_products||[]).map(v=>v.id));
+  // Sync tagged products — use stringify for deep comparison
+  const vpKey = JSON.stringify((video.video_products||[]).map(v=>v.id+v.timestamp_seconds));
   useEffect(()=>{
     setTaggedProducts(
-      (video.video_products || []).map(vp => ({
+      (video.video_products || []).map((vp, i) => ({
+        _id: vp.id || `new-${i}-${Date.now()}`, // stable ID for keying
         shopify_product_id: vp.shopify_product_id,
         shopify_handle: vp.shopify_handle,
         product_name: vp.product_name,
-        timestamp_seconds: vp.timestamp_seconds,
-        duration_seconds: vp.duration_seconds || 8,
+        timestamp_seconds: parseInt(vp.timestamp_seconds) || 0,
+        duration_seconds: parseInt(vp.duration_seconds) || 8,
         _image: shopifyProducts.find(p => p.id === vp.shopify_product_id)?.image || null,
       }))
     );
@@ -528,8 +529,8 @@ function VideoEditPanel({ video, shopifyProducts, onSave, onClose }) {
           ) : (
             [...taggedProducts]
               .sort((a, b) => (parseInt(a.timestamp_seconds)||0) - (parseInt(b.timestamp_seconds)||0))
-              .map((tp, i) => (
-                <div key={i} className="tag-row" style={{flexDirection:"column",alignItems:"stretch",gap:8}}>
+              .map((tp) => (
+                <div key={tp._id} className="tag-row" style={{flexDirection:"column",alignItems:"stretch",gap:8}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     {tp._image
                       ? <img className="tag-row-img" src={tp._image} alt={tp.product_name} />
@@ -543,20 +544,23 @@ function VideoEditPanel({ video, shopifyProducts, onSave, onClose }) {
                       <button
                         style={{padding:"4px 8px",background:"var(--surface3)",border:"1px solid var(--border2)",borderRadius:3,color:"var(--gold)",fontFamily:"var(--fc)",fontSize:10,fontWeight:700,cursor:"pointer",letterSpacing:".5px",textTransform:"uppercase"}}
                         onClick={()=>{
-                          setEditingTagIdx(editingTagIdx===i?null:i);
-                          setEditTs(fmtTimestamp(tp.timestamp_seconds));
-                          setEditDur(String(tp.duration_seconds||8));
+                          const isEditing = editingTagIdx===tp._id;
+                          setEditingTagIdx(isEditing?null:tp._id);
+                          if(!isEditing){
+                            setEditTs(fmtTimestamp(tp.timestamp_seconds));
+                            setEditDur(String(tp.duration_seconds||8));
+                          }
                         }}
                       >
-                        {editingTagIdx===i?"Cancel":"Edit"}
+                        {editingTagIdx===tp._id?"Cancel":"Edit"}
                       </button>
                       <button className="tag-rm" onClick={()=>{
-                        setTaggedProducts(prev=>prev.filter((_,idx)=>idx!==i));
-                        if(editingTagIdx===i) setEditingTagIdx(null);
+                        setTaggedProducts(prev=>prev.filter(p=>p._id!==tp._id));
+                        if(editingTagIdx===tp._id) setEditingTagIdx(null);
                       }}>✕</button>
                     </div>
                   </div>
-                  {editingTagIdx===i&&(
+                  {editingTagIdx===tp._id&&(
                     <div style={{background:"var(--surface3)",borderRadius:4,padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                         <div>
@@ -583,8 +587,9 @@ function VideoEditPanel({ video, shopifyProducts, onSave, onClose }) {
                         onClick={()=>{
                           const newTs = parseTimestamp(editTs);
                           const newDur = parseInt(editDur)||8;
-                          setTaggedProducts(prev=>prev.map((p,idx)=>
-                            idx===i ? {...p, timestamp_seconds:newTs, duration_seconds:newDur} : p
+                          // Update by _id not index — survives sort order changes
+                          setTaggedProducts(prev=>prev.map(p=>
+                            p._id===tp._id ? {...p, timestamp_seconds:newTs, duration_seconds:newDur} : p
                           ));
                           setEditingTagIdx(null);
                         }}
@@ -618,7 +623,10 @@ function VideoEditPanel({ video, shopifyProducts, onSave, onClose }) {
           products={shopifyProducts}
           onClose={() => setShowPicker(false)}
           onPick={product => {
-            setTaggedProducts(prev => [...prev, product]);
+            setTaggedProducts(prev => [...prev, {
+              ...product,
+              _id: `new-${Date.now()}-${Math.random()}`,
+            }]);
             setShowPicker(false);
           }}
         />

@@ -361,21 +361,31 @@ function PreRoll({onSkip, onImpression}) {
 function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
   const [playing, setPlaying] = useState(false);
   const [showAd, setShowAd] = useState(true);
-  const [shopProd, setShopProd] = useState(null);
-  const [dockedProd, setDockedProd] = useState(null);
+  const [shopProd, setShopProd] = useState(null);   // featured (3s floating card)
+  const [dockedProd, setDockedProd] = useState(null); // permanent bar below video
   const [showProd, setShowProd] = useState(false);
   const muxRef = useRef(null);
   const dockTimer = useRef(null);
   const fired = useRef(new Set());
-  // Keep refs current for use inside event handlers
+  // Refs updated synchronously so onTimeUpdate always has latest values
   const shopProdRef = useRef(null);
   const productsRef = useRef(products);
-  const videoRef = useRef(video);
-  useEffect(()=>{ shopProdRef.current = shopProd; },[shopProd]);
-  useEffect(()=>{ productsRef.current = products; },[products]);
-  useEffect(()=>{ videoRef.current = video; fired.current = new Set(); },[video.id]);
+  const taggedRef = useRef(video.taggedProducts || []);
 
-  // When featured product set — move to docked after 3s
+  // Sync refs immediately on every render (no useEffect delay)
+  shopProdRef.current = shopProd;
+  productsRef.current = products;
+  // Only reset fired set when video changes
+  const videoIdRef = useRef(video.id);
+  if(video.id !== videoIdRef.current){
+    videoIdRef.current = video.id;
+    fired.current = new Set();
+    taggedRef.current = video.taggedProducts || [];
+  }
+  // Always keep tagged ref current
+  taggedRef.current = video.taggedProducts || [];
+
+  // Move featured product to docked bar after 3s
   useEffect(()=>{
     if(!shopProd) return;
     clearTimeout(dockTimer.current);
@@ -394,21 +404,22 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
   const handleTimeUpdate = useCallback((e)=>{
     const el = e.target;
     if(!el || !el.duration || el.currentTime < 0.5) return;
-    if(shopProdRef.current) return; // already showing a product
-    const tp = getProductToFire(
-      el.currentTime,
-      videoRef.current?.taggedProducts,
-      fired.current
-    );
+    // Allow new product to fire even if one is docked — just not if featured is showing
+    if(shopProdRef.current) return;
+    const tp = getProductToFire(el.currentTime, taggedRef.current, fired.current);
     if(tp){
       const prod = productsRef.current?.find(p=>p.handle===tp.shopify_handle);
       if(prod){
         fired.current.add(parseInt(tp.timestamp_seconds)||0);
         setShopProd(prod);
-        setDockedProd(null);
+        // Don't clear docked — let both coexist briefly, docked updates when new one docks
       }
     }
   },[]);
+
+  // Height budget: 100dvh - 48px header - env(safe-area) - 56px bottom nav
+  // Video gets what it needs up to that budget
+  const videoMaxH = "calc(100dvh - 48px - 56px - env(safe-area-inset-bottom, 0px))";
 
   return (
     <div className="modal">
@@ -417,22 +428,20 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
         <div className="mtitle">{video.title}</div>
       </div>
       <div className="mbody">
-        <div style={{position:"relative",background:"#000"}}>
+        <div style={{background:"#000",flexShrink:0}}>
           {showAd ? (
             <div className="player-stage">
               <PreRoll onSkip={handleSkipAd} onImpression={()=>onImpression?.({type:"pre-roll",campaignId:"cam1"})}/>
             </div>
           ) : video.muxPlaybackId ? (
-            /* Wrap player in relative container so featured overlay
-               positions against the video frame only */
-            <div className="mux-wrap">
+            <div style={{width:"100%",background:"#000",lineHeight:0,maxHeight:videoMaxH,overflow:"hidden"}}>
               <MuxPlayer
                 ref={muxRef}
                 playbackId={video.muxPlaybackId}
                 streamType="on-demand"
                 autoPlay={false}
                 accentColor="#C0272D"
-                style={{width:"100%",display:"block",aspectRatio:"unset"}}
+                style={{width:"100%",display:"block",maxHeight:videoMaxH}}
                 onTimeUpdate={handleTimeUpdate}
                 onPlay={()=>setPlaying(true)}
                 onPause={()=>setPlaying(false)}
@@ -476,11 +485,14 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
             </div>
           )}
         </div>
-        {/* DOCKED BAR — sits below video, persists until dismissed */}
+        {/* DOCKED BAR — directly below video, always in view */}
         {dockedProd&&(
-          <div className="shop-docked" onClick={()=>{setShowProd(true);muxRef.current?.pause();}}>
+          <div
+            style={{background:"var(--surface)",borderTop:"2px solid var(--gold)",borderBottom:"1px solid var(--border)",padding:"10px 14px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",flexShrink:0}}
+            onClick={()=>{setShowProd(true);muxRef.current?.pause();}}
+          >
             {dockedProd.primaryImage
-              ?<img className="shop-img" src={dockedProd.primaryImage} alt={dockedProd.name}/>
+              ?<img src={dockedProd.primaryImage} alt={dockedProd.name} style={{width:44,height:44,borderRadius:4,objectFit:"cover",flexShrink:0}}/>
               :<div style={{width:44,height:44,borderRadius:4,background:"var(--surface3)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>📦</div>
             }
             <div style={{flex:1,minWidth:0}}>
@@ -489,19 +501,22 @@ function VideoPlayer({video, products, onClose, onAddToCart, onImpression}) {
               <div style={{fontFamily:"var(--fc)",fontSize:12,color:"var(--gold)",fontWeight:700}}>{fp(dockedProd.price)}</div>
             </div>
             <div style={{display:"flex",gap:6,flexShrink:0}}>
-              <button className="shop-ov-btn">Shop Now</button>
+              <button className="shop-ov-btn" onClick={e=>{e.stopPropagation();setShowProd(true);muxRef.current?.pause();}}>Shop Now</button>
               <button onClick={e=>{e.stopPropagation();setDockedProd(null);}} style={{padding:"6px 8px",borderRadius:3,background:"rgba(255,255,255,.08)",border:"1px solid var(--border2)",color:"var(--gray)",cursor:"pointer",fontSize:12}}>✕</button>
             </div>
           </div>
         )}
-        <div style={{padding:"12px 16px",borderTop:"1px solid var(--border)"}}>
-          <div style={{fontFamily:"var(--fd)",fontSize:17,fontWeight:600,color:"var(--white)",marginBottom:3}}>{video.title}</div>
-          <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
-            {video.creator&&<span style={{fontFamily:"var(--fc)",fontSize:12,color:"var(--gray)"}}>{video.creator}</span>}
-            {video.category&&<span style={{fontFamily:"var(--fc)",fontSize:11,color:"var(--gray2)"}}>{video.category}</span>}
+        {/* Video info — scrollable area below */}
+        <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+          <div style={{padding:"10px 14px",borderTop:"1px solid var(--border)"}}>
+            <div style={{fontFamily:"var(--fd)",fontSize:16,fontWeight:600,color:"var(--white)",marginBottom:2}}>{video.title}</div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              {video.creator&&<span style={{fontFamily:"var(--fc)",fontSize:11,color:"var(--gray)"}}>{video.creator}</span>}
+              {video.category&&<span style={{fontFamily:"var(--fc)",fontSize:11,color:"var(--gray2)"}}>{video.category}</span>}
+            </div>
           </div>
+          <div style={{height:80}}/>
         </div>
-        <div className="gap"/>
       </div>
       {/* FEATURED CARD — fixed bottom of screen, slides up for 3s then moves to docked bar */}
       {shopProd&&(
